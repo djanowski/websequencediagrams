@@ -1,6 +1,6 @@
 Usage:
 
-    wsd diagram.txt
+    wsd diagram.txt [target [format]]
 
     cat diagram.txt | wsd
 
