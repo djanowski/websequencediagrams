@@ -19,11 +19,15 @@ if not supported_formats.member? format
 	raise "Format not supported"
 end
 
+save_files = ("true" === ARGV[3] || "1" === ARGV[3])
+
+style = ARGV[4] || "napkin"
+
 file = "#{ ARGV[1]}.#{ format }"
 
-response = Net::HTTP.post_form(URI.parse('http://www.websequencediagrams.com/index.php'), {'style' => 'napkin', 'message' => text, 'format' => format})
+response = Net::HTTP.post_form(URI.parse('http://www.websequencediagrams.com/index.php'), {'style' => style, 'message' => text, 'format' => format})
 
-if %w{png jpg svg}.member? format
+if %w{png jpg svg}.member? format and not save_files
   if response.body =~ /img: "(.+)"/
     system("open http://www.websequencediagrams.com/#{$1}")
   end
