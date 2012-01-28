@@ -1,40 +1,78 @@
 #! /usr/bin/env ruby
-require 'net/http'
-require 'uri'
-
-if $stdout.tty?
-  if File.exist?(ARGV[0])
-    text = File.read(ARGV[0])
-  else
-    require 'open-uri'
-    text = open(ARGV[0], 'Accept' => 'text/plain').read
-  end
-else
-  text = readlines.join
+all_libs_present = true
+begin
+  require 'net/http'
+  require 'open-uri'
+  require 'trollop'
+  require 'uri'
+rescue Exception => e
+  all_libs_present = false
 end
 
-format = ARGV[2] || "png"
+if not all_libs_present
+  puts "Not all required libraries are present, exiting!"
+  exit(1)
+end
+
+opts = Trollop::options do
+  version "1.1"
+  text <<-EOS
+      Fetch diagram from websequencediagrams.com with supplied information
+  EOS
+  opt :file,    "Use file input",   :type => :string,   :default => "-"
+  opt :format,  "Use format",       :type => :string,   :default => "png"
+  opt :store,   "Store in file",    :type => :flag
+  opt :target,  "Target filename",  :type => :string,   :default => "-"
+  opt :style,   "Diagram style",    :type => :string,   :default => "napkin"
+  opt :silent,  "Stay silent",      :type => :flag
+end
+
 supported_formats = %w{ pdf png jpg svg}
-if not supported_formats.member? format
-	raise "Format not supported"
+Trollop::die :format, "not supported" unless supported_formats.member? opts[:format] if opts[:format_given]
+                
+if not opts[:target_given] and opts[:file_given]
+  opts[:target] = opts[:file]
 end
 
-save_files = ("true" === ARGV[3] || "1" === ARGV[3])
+if opts[:target_given]
+  opts[:store] = true
+end                  
 
-style = ARGV[4] || "napkin"
+Trollop::die :store, "was told to store output but no target filename has been supplied" if opts[:store] and not opts[:target_given]  
 
-file = "#{ ARGV[1]}.#{ format }"
+format = opts[:format]
+save_files = opts[:store]
+style = opts[:style]                                            
+stay_silent = opts[:silent]
+
+if opts[:file] == '-'
+  text = readlines.join
+else                        
+  filename = opts[:file]
+  if File.exist?(filename)
+    text = File.read(filename)
+  else
+    text = open(filename, 'Accept' => 'text/plain').read # treat http as pipe
+  end
+end                 
 
 response = Net::HTTP.post_form(URI.parse('http://www.websequencediagrams.com/index.php'), {'style' => style, 'message' => text, 'format' => format})
 
-if %w{png jpg svg}.member? format and not save_files
+if not save_files                
   if response.body =~ /img: "(.+)"/
     system("open http://www.websequencediagrams.com/#{$1}")
+  else 
+    raise "An error has happened with the response"
   end
-elsif response.body =~ /img: "(.+)"/
-  puts "Writing to file #{file}"
-  request_file = "http://www.websequencediagrams.com/#{$1}"
-  puts "Reading from uri #{request_file}"
-  response_file = Net::HTTP.get(URI.parse(request_file))
-  File.open(file, "w+") { |f| f << response_file }
+else
+  target_filename = "#{opts[:target]}.#{format}"
+  if response.body =~ /img: "(.+)"/
+    puts "Writing to file #{target_filename}" unless stay_silent
+    request_file = "http://www.websequencediagrams.com/#{$1}"
+    puts "Reading from uri #{request_file}" unless stay_silent
+    response_file = Net::HTTP.get(URI.parse(request_file))
+    File.open(target_filename, "w+") { |f| f << response_file }
+  else
+    raise "An error has happened with the response"
+  end
 end
